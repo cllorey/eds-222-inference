@@ -12,7 +12,7 @@ set.seed(222)
 theme_set(theme_bw())
 
 # Read the soil core data
-soil_cores <- ???
+soil_cores <- read_csv('/courses/EDS222/data/exide-soil-cores.csv')
 ```
 
 ## Permutation test
@@ -23,9 +23,9 @@ In the lab, you used a **permutation test** to investigate the claim _"Lead is e
 
 State the null and alternative hypotheses for this claim.
 
-$H_0$: 
+$H_0$: There is no difference in the occurence of lead levels exceeding 200 ppm between samples from the north and samples from the south
 
-$H_A$:
+$H_A$: Soil samples with lead levels exceeding 200ppm are more prevalent north of Exide than to the south  
 
 ### Calculate the observed value of the statistic
 
@@ -39,14 +39,14 @@ Use `dplyr` functions to wrangle the soil core data for this part. Properties st
 
 ```{r}
 ena_esa <- soil_cores |>
-  # create a column called "area", which is the first three characters of property_id
-  # then filter to observations where area is ENA or ESA
+  mutate(area = str_sub(property_id, start = 1L, end = 3L)) |>  # create a column called "area", which is the first three characters of property_id
+  filter((area == 'ENA') | (area == 'ESA'))  # then filter to observations where area is ENA or ESA
 
-area_summ <- ena_esa |>
-  # summarize to get the proportion of samples where lead is over 200 ppm, by area
-  # sort by the area
+# summarize to get the proportion of samples where lead is over 200 ppm, by area, sort by the area
+area_summ <- ena_esa |> summarize(prop200 = mean(pb_ppm > 200), .by = area) |>
+  arrange(area)
 
-obs_diff_props <- # get the difference in proportions between the two groups
+obs_diff_props <- area_summ$prop200[1] - area_summ$prop200[2] # get the difference in proportions between the two groups
 
 obs_diff_props
 ```
@@ -56,12 +56,13 @@ obs_diff_props
 Shuffle the predictor variable and recalculate the statistic. Do it just once - we'll repeat in the next section.
 
 ```{r}
+# summarize to get the proportion of samples where lead is over 200 ppm, by area, sort by the area
 shuffled_summ <- ena_esa |>
-  # shuffle the predictor (use mutate and sample)
-  # summarize to get the proportion of samples where lead is over 200 ppm, by area
-  # sort by the area
+  mutate(area = sample(area)) |> # shuffle the predictor (use mutate and sample)
+  summarize(prop200 = mean(pb_ppm > 200), .by = area) |> 
+  arrange(area)
 
-shuffled_diff_props <- # get the difference in proportions between the two groups
+shuffled_diff_props <- shuffled_summ$prop200[1] - shuffled_summ$prop200[2] # get the difference in proportions between the two groups
 
 shuffled_diff_props
 ```
@@ -74,7 +75,12 @@ Repeat shuffling 10,000 times to create a vector that simulates the null distrib
 area_null_dist <- replicate(
   1e4,
   {
-    # put your "shuffle once" code in here, to repeat it 10,000 times
+  shuffled_summ <- ena_esa |>
+  mutate(area = sample(area)) |> 
+  summarize(prop200 = mean(pb_ppm > 200), .by = area) |> 
+  arrange(area)
+
+  shuffled_summ$prop200[1] - shuffled_summ$prop200[2]
   }
 )
 ```
@@ -85,6 +91,10 @@ Visualize the null distribution using a histogram and add a vertical line indica
 
 ```{r}
 tibble(diff_props = area_null_dist) |>
+  ggplot(aes(diff_props)) +
+  geom_histogram(binwidth = .01) + 
+  geom_vline(xintercept = obs_diff_props, color = "magenta", linewidth = 1.5)
+
   # set the aesthetics for x and fill using ggplot
   # add a histogram
   # add a vertical line at the observed difference in proportions
@@ -93,7 +103,7 @@ tibble(diff_props = area_null_dist) |>
 Calculate your p-value.
 
 ```{r}
-pval <- # the proportion of null distribution values greater than or equal to the observed statistic
+pval <- mean(area_null_dist > obs_diff_props) # the proportion of null distribution values greater than or equal to the observed statistic
 
 pval
 ```
@@ -115,7 +125,7 @@ $$
 Fill in the code chunk below to calculate the standard error.
 
 ```{r}
-p_pool <- # total "successes" (soil lead over 200) over total observations
+p_pool <- mean(ena_esa$pb_ppm > 200) # total "successes" (soil lead over 200) over total observations
 n1 <- # number of observations in the "north" group
 n2 <- # number of observations in the "south" group
 se <- # use the formula above
